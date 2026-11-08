@@ -47,7 +47,7 @@ const comboEl = document.querySelector('#game-combo');
 let streak = 0, lives = 3, nextLifeAt = 0;
 let playing = false, paused = false, score = 0, x = .5, items = [], previous = 0, elapsed = 0, spawnClock = 0, frame;
 const held = new Set();
-let lastScrollY = window.scrollY;
+
 function moveTo(next) {
   const width = board.clientWidth;
   x = Math.max(39 / width, Math.min(1 - 39 / width, next));
@@ -121,7 +121,6 @@ function tick(now) {
   frame = requestAnimationFrame(tick);
 }
 function startRun() {
-  lastScrollY = window.scrollY;
   cancelAnimationFrame(frame); items.forEach(item => item.el.remove()); items = []; held.clear();
   score = 0; streak = 0; lives = 3; livesEl.textContent = lives; comboEl.textContent = '1×'; board.classList.remove('rug-hit'); elapsed = 0; nextLifeAt = 15 + Math.random() * 15; spawnClock = .3; scoreEl.textContent = '0'; timeEl.textContent = '0'; speedEl.textContent = '1.0×'; end.hidden = false; moveTo(.5);
   resumeOverlay.hidden = true; playing = true; paused = false; pauseButton.hidden = false; pauseButton.textContent = 'PAUSE Ⅱ'; pauseButton.setAttribute('aria-pressed', 'false'); board.classList.remove('paused'); board.classList.add('playing'); idle.hidden = true;
@@ -138,7 +137,6 @@ function pauseRun(message = 'Paused. Click the game or Resume to keep stacking.'
   status.textContent = message;
 }
 function resumeRun(focusBoard = false) {
-  lastScrollY = window.scrollY;
   if (!playing || !paused || document.hidden) return;
   paused = false; held.clear(); idle.hidden = true; resumeOverlay.hidden = true;
   board.classList.remove('paused'); board.classList.add('playing');
@@ -147,18 +145,21 @@ function resumeRun(focusBoard = false) {
   if (focusBoard) board.focus({ preventScroll: true });
   previous = performance.now(); frame = requestAnimationFrame(tick);
 }
-resumeOverlay.addEventListener('click', e => { e.stopPropagation(); resumeRun(e.detail === 0); });
 pauseButton.addEventListener('click', e => paused ? resumeRun(e.detail === 0) : pauseRun());
-document.querySelector('#arcade').addEventListener('click', e => {
+board.addEventListener('click', e => {
   if (e.target.closest('button, a')) return;
   if (!playing) startRun(); else if (paused) resumeRun();
 });
-window.addEventListener('scroll', () => {
-  const nextY = window.scrollY;
-  if (nextY !== lastScrollY) pauseRun('Paused while scrolling. Click the game or Resume when you’re ready.');
-  lastScrollY = nextY;
-}, { passive: true });
-window.addEventListener('wheel', () => pauseRun('Paused while scrolling. Click the game or Resume when you’re ready.'), { passive: true });
+// Observe the playfield itself. Scrolling while it remains visible is harmless.
+let wasBoardVisible = null;
+const boardVisibility = new IntersectionObserver(([entry]) => {
+  const visible = entry.isIntersecting;
+  if ((!visible || wasBoardVisible === false) && playing) {
+    pauseRun(visible ? 'Game screen back in view. Tap the screen or Resume above to continue.' : 'Paused: game screen out of view. Your bag is safe.');
+  }
+  wasBoardVisible = visible;
+}, { threshold: 0 });
+boardVisibility.observe(board);
 const keyDirection = key => ['ArrowLeft','a','A'].includes(key) ? 'left' : ['ArrowRight','d','D'].includes(key) ? 'right' : null;
 board.addEventListener('keydown', e => { const dir = keyDirection(e.key); if (playing && !paused && dir) { e.preventDefault(); held.add(dir); } });
 window.addEventListener('keyup', e => { const dir = keyDirection(e.key); if (dir) held.delete(dir); });
