@@ -35,6 +35,7 @@ const scoreEl = document.querySelector('#game-score');
 const timeEl = document.querySelector('#game-time');
 const speedEl = document.querySelector('#game-speed');
 const end = document.querySelector('#game-end');
+const pauseButton = document.querySelector('#game-pause');
 const livesEl = document.querySelector('#game-lives');
 const bestEl = document.querySelector('#game-best');
 const idle = document.querySelector('#game-idle');
@@ -43,8 +44,9 @@ try { best = Math.max(0, Number(localStorage.getItem('frise-crypto-best')) || 0)
 bestEl.textContent = best;
 const comboEl = document.querySelector('#game-combo');
 let streak = 0, lives = 3, nextLifeAt = 0;
-let playing = false, score = 0, x = .5, items = [], previous = 0, elapsed = 0, spawnClock = 0, frame;
+let playing = false, paused = false, score = 0, x = .5, items = [], previous = 0, elapsed = 0, spawnClock = 0, frame;
 const held = new Set();
+let lastScrollY = window.scrollY;
 function moveTo(next) {
   const width = board.clientWidth;
   x = Math.max(39 / width, Math.min(1 - 39 / width, next));
@@ -54,10 +56,10 @@ function saveBest() {
   if (score > best) { best = score; bestEl.textContent = best; try { localStorage.setItem('frise-crypto-best', String(best)); } catch {} }
 }
 function finish(message, gameOver = false) {
-  end.hidden = true;
+  end.hidden = true; pauseButton.hidden = true; paused = false;
   playing = false; cancelAnimationFrame(frame); held.clear();
   items.forEach(item => item.el.remove()); items = [];
-  board.classList.remove('playing');
+  board.classList.remove('playing', 'paused');
   saveBest();
   idle.hidden = false;
   idle.innerHTML = `${gameOver ? 'GAME OVER.' : 'ROUND COMPLETE.'}<small>Your bag: ${score} points. Back to the trenches?</small>`;
@@ -65,7 +67,7 @@ function finish(message, gameOver = false) {
   start.textContent = 'PLAY AGAIN →';
 }
 function tick(now) {
-  if (!playing) return;
+  if (!playing || paused) return;
   const dt = Math.min((now - previous) / 1000, .05); previous = now; elapsed += dt;
   timeEl.textContent = Math.floor(elapsed);
   const difficulty = 1 + elapsed / 30;
@@ -117,35 +119,62 @@ function tick(now) {
   if (lives === 0) { finish(`Game over! You scored ${score} points. Try again for a bigger bag.`, true); return; }
   frame = requestAnimationFrame(tick);
 }
-start.addEventListener('click', () => {
+function startRun() {
+  lastScrollY = window.scrollY;
   cancelAnimationFrame(frame); items.forEach(item => item.el.remove()); items = []; held.clear();
   score = 0; streak = 0; lives = 3; livesEl.textContent = lives; comboEl.textContent = '1×'; board.classList.remove('rug-hit'); elapsed = 0; nextLifeAt = 15 + Math.random() * 15; spawnClock = .3; scoreEl.textContent = '0'; timeEl.textContent = '0'; speedEl.textContent = '1.0×'; end.hidden = false; moveTo(.5);
-  playing = true; board.classList.add('playing'); idle.hidden = true;
+  playing = true; paused = false; pauseButton.hidden = false; pauseButton.textContent = 'PAUSE Ⅱ'; pauseButton.setAttribute('aria-pressed', 'false'); board.classList.remove('paused'); board.classList.add('playing'); idle.hidden = true;
   status.textContent = 'Three lives. Every rug costs one. Keep stacking as the drops get faster!';
   start.textContent = 'RESTART RUN →'; board.focus({ preventScroll: true }); previous = performance.now(); frame = requestAnimationFrame(tick);
+}
+start.addEventListener('click', startRun);
+function pauseRun(message = 'Paused. Click the game or Resume to keep stacking.') {
+  if (!playing || paused) return;
+  paused = true; cancelAnimationFrame(frame); held.clear();
+  board.classList.remove('playing'); board.classList.add('paused');
+  idle.hidden = false; idle.innerHTML = 'PAUSED.<small>Click or tap here to resume.</small>';
+  pauseButton.textContent = 'RESUME ▶'; pauseButton.setAttribute('aria-pressed', 'true');
+  status.textContent = message;
+}
+function resumeRun() {
+  lastScrollY = window.scrollY;
+  if (!playing || !paused || document.hidden) return;
+  paused = false; held.clear(); idle.hidden = true;
+  board.classList.remove('paused'); board.classList.add('playing');
+  pauseButton.textContent = 'PAUSE Ⅱ'; pauseButton.setAttribute('aria-pressed', 'false');
+  status.textContent = 'Back in the trenches. Keep stacking!';
+  board.focus({ preventScroll: true }); previous = performance.now(); frame = requestAnimationFrame(tick);
+}
+pauseButton.addEventListener('click', () => paused ? resumeRun() : pauseRun());
+document.querySelector('#arcade').addEventListener('click', e => {
+  if (e.target.closest('button, a')) return;
+  if (!playing) startRun(); else if (paused) resumeRun();
 });
+window.addEventListener('scroll', () => {
+  const nextY = window.scrollY;
+  if (nextY !== lastScrollY) pauseRun('Paused while scrolling. Click the game or Resume when you’re ready.');
+  lastScrollY = nextY;
+}, { passive: true });
+window.addEventListener('wheel', () => pauseRun('Paused while scrolling. Click the game or Resume when you’re ready.'), { passive: true });
 const keyDirection = key => ['ArrowLeft','a','A'].includes(key) ? 'left' : ['ArrowRight','d','D'].includes(key) ? 'right' : null;
-board.addEventListener('keydown', e => { const dir = keyDirection(e.key); if (playing && dir) { e.preventDefault(); held.add(dir); } });
+board.addEventListener('keydown', e => { const dir = keyDirection(e.key); if (playing && !paused && dir) { e.preventDefault(); held.add(dir); } });
 window.addEventListener('keyup', e => { const dir = keyDirection(e.key); if (dir) held.delete(dir); });
 window.addEventListener('blur', () => held.clear());
 board.addEventListener('blur', () => held.clear());
-board.addEventListener('pointerdown', e => { if (!playing) return; board.setPointerCapture(e.pointerId); moveTo((e.clientX - board.getBoundingClientRect().left) / board.clientWidth); });
-board.addEventListener('pointermove', e => { if (playing && (e.buttons || e.pointerType === 'touch')) moveTo((e.clientX - board.getBoundingClientRect().left) / board.clientWidth); });
+board.addEventListener('pointerdown', e => { if (!playing || paused) return; board.setPointerCapture(e.pointerId); moveTo((e.clientX - board.getBoundingClientRect().left) / board.clientWidth); });
+board.addEventListener('pointermove', e => { if (playing && !paused && (e.buttons || e.pointerType === 'touch')) moveTo((e.clientX - board.getBoundingClientRect().left) / board.clientWidth); });
 for (const dir of ['left','right']) {
   const control = document.querySelector(`#game-${dir}`);
-  control.addEventListener('pointerdown', e => { if (!playing) return; e.preventDefault(); control.setPointerCapture(e.pointerId); held.add(dir); });
+  control.addEventListener('pointerdown', e => { if (!playing || paused) return; e.preventDefault(); control.setPointerCapture(e.pointerId); held.add(dir); });
   ['pointerup','pointercancel','lostpointercapture'].forEach(type => control.addEventListener(type, () => held.delete(dir)));
-  control.addEventListener('keydown', e => { if (playing && [' ','Enter'].includes(e.key)) { e.preventDefault(); held.add(dir); } });
+  control.addEventListener('keydown', e => { if (playing && !paused && [' ','Enter'].includes(e.key)) { e.preventDefault(); held.add(dir); } });
   control.addEventListener('keyup', () => held.delete(dir));
   control.addEventListener('blur', () => held.delete(dir));
 }
-// Suspend the simulation in hidden tabs without ending an endless run.
+// Hidden tabs stay paused until the player explicitly resumes.
 end.addEventListener('click', () => { if (playing) finish(); });
 document.addEventListener('visibilitychange', () => {
-  if (!playing) return;
-  held.clear(); cancelAnimationFrame(frame);
-  if (document.hidden) { status.textContent = 'Run paused while you’re away. Your bag is safe.'; }
-  else { status.textContent = 'Back in the trenches. Keep stacking!'; previous = performance.now(); frame = requestAnimationFrame(tick); }
+  if (document.hidden) pauseRun('Paused while you’re away. Click the game or Resume to continue.');
 });
 
 const nightToggle = document.querySelector('.night-toggle');
