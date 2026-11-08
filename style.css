@@ -16,3 +16,5 @@ body{overflow-x:clip}.star,.logo span,.card-icon{font-variant-emoji:text}@media(
 [hidden]{display:none!important}#game-end{margin-top:15px;font-size:10px;padding:13px 18px}.game-stats{row-gap:10px}
 
 .game-board{height:560px}.lives-stat{color:#ffb9a4}.lives-stat>span{color:#ff6a63}@media(max-width:600px){.game-board{height:480px;height:clamp(420px,65svh,560px)}}
+
+.falling.life{width:36px;height:36px;border:2px solid #236a45;border-radius:50%;background:#c4ffd5;color:#d52a43;display:grid;place-items:center;font-size:24px;box-shadow:0 0 12px #67cda899;line-height:1}
