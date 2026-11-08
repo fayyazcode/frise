@@ -36,6 +36,7 @@ const timeEl = document.querySelector('#game-time');
 const speedEl = document.querySelector('#game-speed');
 const end = document.querySelector('#game-end');
 const pauseButton = document.querySelector('#game-pause');
+const resumeOverlay = document.querySelector('#game-resume-overlay');
 const livesEl = document.querySelector('#game-lives');
 const bestEl = document.querySelector('#game-best');
 const idle = document.querySelector('#game-idle');
@@ -56,7 +57,7 @@ function saveBest() {
   if (score > best) { best = score; bestEl.textContent = best; try { localStorage.setItem('frise-crypto-best', String(best)); } catch {} }
 }
 function finish(message, gameOver = false) {
-  end.hidden = true; pauseButton.hidden = true; paused = false;
+  resumeOverlay.hidden = true; end.hidden = true; pauseButton.hidden = true; paused = false;
   playing = false; cancelAnimationFrame(frame); held.clear();
   items.forEach(item => item.el.remove()); items = [];
   board.classList.remove('playing', 'paused');
@@ -123,7 +124,7 @@ function startRun() {
   lastScrollY = window.scrollY;
   cancelAnimationFrame(frame); items.forEach(item => item.el.remove()); items = []; held.clear();
   score = 0; streak = 0; lives = 3; livesEl.textContent = lives; comboEl.textContent = '1×'; board.classList.remove('rug-hit'); elapsed = 0; nextLifeAt = 15 + Math.random() * 15; spawnClock = .3; scoreEl.textContent = '0'; timeEl.textContent = '0'; speedEl.textContent = '1.0×'; end.hidden = false; moveTo(.5);
-  playing = true; paused = false; pauseButton.hidden = false; pauseButton.textContent = 'PAUSE Ⅱ'; pauseButton.setAttribute('aria-pressed', 'false'); board.classList.remove('paused'); board.classList.add('playing'); idle.hidden = true;
+  resumeOverlay.hidden = true; playing = true; paused = false; pauseButton.hidden = false; pauseButton.textContent = 'PAUSE Ⅱ'; pauseButton.setAttribute('aria-pressed', 'false'); board.classList.remove('paused'); board.classList.add('playing'); idle.hidden = true;
   status.textContent = 'Three lives. Every rug costs one. Keep stacking as the drops get faster!';
   start.textContent = 'RESTART RUN →'; board.focus({ preventScroll: true }); previous = performance.now(); frame = requestAnimationFrame(tick);
 }
@@ -132,20 +133,22 @@ function pauseRun(message = 'Paused. Click the game or Resume to keep stacking.'
   if (!playing || paused) return;
   paused = true; cancelAnimationFrame(frame); held.clear();
   board.classList.remove('playing'); board.classList.add('paused');
-  idle.hidden = false; idle.innerHTML = 'PAUSED.<small>Click or tap here to resume.</small>';
+  idle.hidden = true; resumeOverlay.hidden = false;
   pauseButton.textContent = 'RESUME ▶'; pauseButton.setAttribute('aria-pressed', 'true');
   status.textContent = message;
 }
-function resumeRun() {
+function resumeRun(focusBoard = false) {
   lastScrollY = window.scrollY;
   if (!playing || !paused || document.hidden) return;
-  paused = false; held.clear(); idle.hidden = true;
+  paused = false; held.clear(); idle.hidden = true; resumeOverlay.hidden = true;
   board.classList.remove('paused'); board.classList.add('playing');
   pauseButton.textContent = 'PAUSE Ⅱ'; pauseButton.setAttribute('aria-pressed', 'false');
   status.textContent = 'Back in the trenches. Keep stacking!';
-  board.focus({ preventScroll: true }); previous = performance.now(); frame = requestAnimationFrame(tick);
+  if (focusBoard) board.focus({ preventScroll: true });
+  previous = performance.now(); frame = requestAnimationFrame(tick);
 }
-pauseButton.addEventListener('click', () => paused ? resumeRun() : pauseRun());
+resumeOverlay.addEventListener('click', e => { e.stopPropagation(); resumeRun(e.detail === 0); });
+pauseButton.addEventListener('click', e => paused ? resumeRun(e.detail === 0) : pauseRun());
 document.querySelector('#arcade').addEventListener('click', e => {
   if (e.target.closest('button, a')) return;
   if (!playing) startRun(); else if (paused) resumeRun();
