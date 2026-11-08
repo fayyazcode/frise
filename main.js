@@ -33,6 +33,8 @@ const start = document.querySelector('#game-start');
 const status = document.querySelector('#game-status');
 const scoreEl = document.querySelector('#game-score');
 const timeEl = document.querySelector('#game-time');
+const speedEl = document.querySelector('#game-speed');
+const end = document.querySelector('#game-end');
 const bestEl = document.querySelector('#game-best');
 const idle = document.querySelector('#game-idle');
 let best = 0;
@@ -47,11 +49,15 @@ function moveTo(next) {
   x = Math.max(39 / width, Math.min(1 - 39 / width, next));
   bag.style.left = `${x * 100}%`;
 }
+function saveBest() {
+  if (score > best) { best = score; bestEl.textContent = best; try { localStorage.setItem('frise-crypto-best', String(best)); } catch {} }
+}
 function finish(message) {
+  end.hidden = true;
   playing = false; cancelAnimationFrame(frame); held.clear();
   items.forEach(item => item.el.remove()); items = [];
   board.classList.remove('playing');
-  if (score > best) { best = score; bestEl.textContent = best; try { localStorage.setItem('frise-crypto-best', String(best)); } catch {} }
+  saveBest();
   idle.hidden = false;
   idle.innerHTML = `ROUND COMPLETE.<small>Your bag: ${score} points. Back to the trenches?</small>`;
   status.textContent = message || `Bag secured! You scored ${score} points. ${score >= 150 ? 'Certified golden.' : 'Another shift? You got this.'}`;
@@ -60,31 +66,33 @@ function finish(message) {
 function tick(now) {
   if (!playing) return;
   const dt = Math.min((now - previous) / 1000, .05); previous = now; elapsed += dt;
-  timeEl.textContent = Math.max(0, Math.ceil(30 - elapsed));
-  if (elapsed >= 30) { finish(); return; }
+  timeEl.textContent = Math.floor(elapsed);
+  const difficulty = 1 + elapsed / 30;
+  speedEl.textContent = `${difficulty.toFixed(1)}×`;
   const width = board.clientWidth, height = board.clientHeight;
   const direction = Number(held.has('right')) - Number(held.has('left'));
   moveTo(x + direction * dt * .85);
   spawnClock += dt;
-  if (spawnClock >= .48) {
+  if (spawnClock >= .48 / Math.sqrt(difficulty)) {
     spawnClock = 0;
     const roll = Math.random();
     const bad = roll < .22;
     const kind = bad ? 'rug' : roll < .45 ? 'sol' : 'fry';
     const el = document.createElement('div'); el.className = `falling ${kind}`; el.textContent = kind === 'rug' ? 'RUG' : kind === 'sol' ? 'SOL' : '';  el.setAttribute('aria-hidden', 'true'); board.append(el);
-    items.push({ el, bad, kind, x: .06 + Math.random() * .88, y: -40, speed: 130 + Math.random() * 60 + elapsed * 2 });
+    items.push({ el, bad, kind, x: .06 + Math.random() * .88, y: -40, speed: 130 + Math.random() * 60 });
   }
   items = items.filter(item => {
-    item.y += item.speed * dt;
+    const previousY = item.y;
+    item.y += item.speed * difficulty * dt;
     const ix = item.x * width;
     item.el.style.transform = `translate(${ix}px,${item.y}px) rotate(${item.bad ? -15 : 18}deg)`;
     const bottom = item.y + (item.bad ? 34 : 38);
-    if (bottom >= height - 79 && item.y < height - 14 && Math.abs(ix + 8 - x * width) < 40) {
+    if (bottom >= height - 79 && previousY < height - 14 && Math.abs(ix + 8 - x * width) < 40) {
       const multiplier = Math.min(3, 1 + Math.floor(streak / 5));
       const points = item.bad ? -30 : (item.kind === 'sol' ? 25 : 10) * multiplier;
       streak = item.bad ? 0 : streak + 1;
       comboEl.textContent = `${Math.min(3, 1 + Math.floor(streak / 5))}×`;
-      score = Math.max(0, score + points); scoreEl.textContent = score;
+      score = Math.max(0, score + points); scoreEl.textContent = score; saveBest();
       board.classList.remove('rug-hit'); if (item.bad && !reducedMotion) { void board.offsetWidth; board.classList.add('rug-hit'); }
       const pop = document.createElement('span'); pop.className = 'catch-pop'; pop.textContent = item.bad ? 'RUG −30' : `+${points}${multiplier > 1 ? ' WAGMI' : ''}`; pop.style.left = `${ix}px`; pop.style.top = `${height - 105}px`; board.append(pop); setTimeout(() => pop.remove(), 650);
       item.el.remove(); return false;
@@ -96,9 +104,9 @@ function tick(now) {
 }
 start.addEventListener('click', () => {
   cancelAnimationFrame(frame); items.forEach(item => item.el.remove()); items = []; held.clear();
-  score = 0; streak = 0; comboEl.textContent = '1×'; board.classList.remove('rug-hit'); elapsed = 0; spawnClock = .3; scoreEl.textContent = '0'; timeEl.textContent = '30'; moveTo(.5);
+  score = 0; streak = 0; comboEl.textContent = '1×'; board.classList.remove('rug-hit'); elapsed = 0; spawnClock = .3; scoreEl.textContent = '0'; timeEl.textContent = '0'; speedEl.textContent = '1.0×'; end.hidden = false; moveTo(.5);
   playing = true; board.classList.add('playing'); idle.hidden = true;
-  status.textContent = 'Market open! Stack fries & SOL. Red RUGs reset your combo.';
+  status.textContent = 'Endless mode! Drops get faster over time. Cash out whenever you like.';
   start.textContent = 'RESTART RUN →'; board.focus({ preventScroll: true }); previous = performance.now(); frame = requestAnimationFrame(tick);
 });
 const keyDirection = key => ['ArrowLeft','a','A'].includes(key) ? 'left' : ['ArrowRight','d','D'].includes(key) ? 'right' : null;
@@ -116,5 +124,11 @@ for (const dir of ['left','right']) {
   control.addEventListener('keyup', () => held.delete(dir));
   control.addEventListener('blur', () => held.delete(dir));
 }
-// End the round when leaving the tab, so background throttling cannot distort a score.
-document.addEventListener('visibilitychange', () => { if (document.hidden && playing) finish('Round ended when you left the tab. Play again whenever you’re ready.'); });
+// Suspend the simulation in hidden tabs without ending an endless run.
+end.addEventListener('click', () => { if (playing) finish(); });
+document.addEventListener('visibilitychange', () => {
+  if (!playing) return;
+  held.clear(); cancelAnimationFrame(frame);
+  if (document.hidden) { status.textContent = 'Run paused while you’re away. Your bag is safe.'; }
+  else { status.textContent = 'Back in the trenches. Keep stacking!'; previous = performance.now(); frame = requestAnimationFrame(tick); }
+});
