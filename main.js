@@ -35,13 +35,14 @@ const scoreEl = document.querySelector('#game-score');
 const timeEl = document.querySelector('#game-time');
 const speedEl = document.querySelector('#game-speed');
 const end = document.querySelector('#game-end');
+const livesEl = document.querySelector('#game-lives');
 const bestEl = document.querySelector('#game-best');
 const idle = document.querySelector('#game-idle');
 let best = 0;
 try { best = Math.max(0, Number(localStorage.getItem('frise-crypto-best')) || 0); } catch {}
 bestEl.textContent = best;
 const comboEl = document.querySelector('#game-combo');
-let streak = 0;
+let streak = 0, lives = 3;
 let playing = false, score = 0, x = .5, items = [], previous = 0, elapsed = 0, spawnClock = 0, frame;
 const held = new Set();
 function moveTo(next) {
@@ -52,14 +53,14 @@ function moveTo(next) {
 function saveBest() {
   if (score > best) { best = score; bestEl.textContent = best; try { localStorage.setItem('frise-crypto-best', String(best)); } catch {} }
 }
-function finish(message) {
+function finish(message, gameOver = false) {
   end.hidden = true;
   playing = false; cancelAnimationFrame(frame); held.clear();
   items.forEach(item => item.el.remove()); items = [];
   board.classList.remove('playing');
   saveBest();
   idle.hidden = false;
-  idle.innerHTML = `ROUND COMPLETE.<small>Your bag: ${score} points. Back to the trenches?</small>`;
+  idle.innerHTML = `${gameOver ? 'GAME OVER.' : 'ROUND COMPLETE.'}<small>Your bag: ${score} points. Back to the trenches?</small>`;
   status.textContent = message || `Bag secured! You scored ${score} points. ${score >= 150 ? 'Certified golden.' : 'Another shift? You got this.'}`;
   start.textContent = 'PLAY AGAIN →';
 }
@@ -82,6 +83,7 @@ function tick(now) {
     items.push({ el, bad, kind, x: .06 + Math.random() * .88, y: -40, speed: 130 + Math.random() * 60 });
   }
   items = items.filter(item => {
+    if (lives === 0) return true;
     const previousY = item.y;
     item.y += item.speed * difficulty * dt;
     const ix = item.x * width;
@@ -89,24 +91,29 @@ function tick(now) {
     const bottom = item.y + (item.bad ? 34 : 38);
     if (bottom >= height - 79 && previousY < height - 14 && Math.abs(ix + 8 - x * width) < 40) {
       const multiplier = Math.min(3, 1 + Math.floor(streak / 5));
-      const points = item.bad ? -30 : (item.kind === 'sol' ? 25 : 10) * multiplier;
+      const points = item.bad ? 0 : (item.kind === 'sol' ? 25 : 10) * multiplier;
+      if (item.bad) {
+        lives -= 1; livesEl.textContent = lives;
+        status.textContent = lives ? `Rug pull! ${lives} ${lives === 1 ? 'life' : 'lives'} left. Keep dodging!` : 'Game over! All three lives lost.';
+      }
       streak = item.bad ? 0 : streak + 1;
       comboEl.textContent = `${Math.min(3, 1 + Math.floor(streak / 5))}×`;
       score = Math.max(0, score + points); scoreEl.textContent = score; saveBest();
       board.classList.remove('rug-hit'); if (item.bad && !reducedMotion) { void board.offsetWidth; board.classList.add('rug-hit'); }
-      const pop = document.createElement('span'); pop.className = 'catch-pop'; pop.textContent = item.bad ? 'RUG −30' : `+${points}${multiplier > 1 ? ' WAGMI' : ''}`; pop.style.left = `${ix}px`; pop.style.top = `${height - 105}px`; board.append(pop); setTimeout(() => pop.remove(), 650);
+      const pop = document.createElement('span'); pop.className = 'catch-pop'; pop.textContent = item.bad ? '−1 LIFE' : `+${points}${multiplier > 1 ? ' WAGMI' : ''}`; pop.style.left = `${ix}px`; pop.style.top = `${height - 105}px`; board.append(pop); setTimeout(() => pop.remove(), 650);
       item.el.remove(); return false;
     }
     if (item.y > height) { if (!item.bad) { streak = 0; comboEl.textContent = '1×'; } item.el.remove(); return false; }
     return true;
   });
+  if (lives === 0) { finish(`Game over! You scored ${score} points. Try again for a bigger bag.`, true); return; }
   frame = requestAnimationFrame(tick);
 }
 start.addEventListener('click', () => {
   cancelAnimationFrame(frame); items.forEach(item => item.el.remove()); items = []; held.clear();
-  score = 0; streak = 0; comboEl.textContent = '1×'; board.classList.remove('rug-hit'); elapsed = 0; spawnClock = .3; scoreEl.textContent = '0'; timeEl.textContent = '0'; speedEl.textContent = '1.0×'; end.hidden = false; moveTo(.5);
+  score = 0; streak = 0; lives = 3; livesEl.textContent = lives; comboEl.textContent = '1×'; board.classList.remove('rug-hit'); elapsed = 0; spawnClock = .3; scoreEl.textContent = '0'; timeEl.textContent = '0'; speedEl.textContent = '1.0×'; end.hidden = false; moveTo(.5);
   playing = true; board.classList.add('playing'); idle.hidden = true;
-  status.textContent = 'Endless mode! Drops get faster over time. Cash out whenever you like.';
+  status.textContent = 'Three lives. Every rug costs one. Keep stacking as the drops get faster!';
   start.textContent = 'RESTART RUN →'; board.focus({ preventScroll: true }); previous = performance.now(); frame = requestAnimationFrame(tick);
 });
 const keyDirection = key => ['ArrowLeft','a','A'].includes(key) ? 'left' : ['ArrowRight','d','D'].includes(key) ? 'right' : null;

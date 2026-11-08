@@ -14,3 +14,5 @@ body{overflow-x:clip}.star,.logo span,.card-icon{font-variant-emoji:text}@media(
 @media(prefers-reduced-motion:reduce){.chart-candles i,.rug-hit{animation:none!important}}
 
 [hidden]{display:none!important}#game-end{margin-top:15px;font-size:10px;padding:13px 18px}.game-stats{row-gap:10px}
+
+.game-board{height:560px}.lives-stat{color:#ffb9a4}.lives-stat>span{color:#ff6a63}@media(max-width:600px){.game-board{height:480px;height:clamp(420px,65svh,560px)}}
