@@ -1,0 +1,120 @@
+const ca = '8F3oV5RtUBfYfqqmHLW8YZxKx9JXE1zeyLm8NZfyQUCB';
+document.querySelectorAll('[data-trade]').forEach(a => a.href = `https://jup.ag/swap/SOL-${ca}`);
+document.querySelectorAll('[data-chart]').forEach(a => a.href = `https://dexscreener.com/solana/${ca}`);
+document.querySelector('#year').textContent = new Date().getFullYear();
+let timer;
+document.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click', async () => {
+  const toast = document.querySelector('#toast');
+  try {
+    await navigator.clipboard.writeText(ca);
+    toast.textContent = 'Freshly copied. Contract address is on your clipboard!';
+  } catch {
+    toast.textContent = 'Copy this address manually from the contract panel.';
+    const code = document.querySelector('code');
+    const range = document.createRange(); range.selectNodeContents(code);
+    const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(range);
+    code.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+  toast.classList.add('visible'); clearTimeout(timer);
+  timer = setTimeout(() => toast.classList.remove('visible'), 4000);
+}));
+
+// Decorative movement is optional; gameplay starts only after an explicit click.
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (!reducedMotion && 'IntersectionObserver' in window) {
+  const observer = new IntersectionObserver(entries => entries.forEach(entry => {
+    if (entry.isIntersecting) { entry.target.classList.add('in-view'); observer.unobserve(entry.target); }
+  }), { threshold: 0.08 });
+  document.querySelectorAll('.story-copy,.cards article,.buy>div,.game-info').forEach(el => { el.classList.add('reveal'); observer.observe(el); });
+}
+const board = document.querySelector('#game-board');
+const bag = document.querySelector('#game-bag');
+const start = document.querySelector('#game-start');
+const status = document.querySelector('#game-status');
+const scoreEl = document.querySelector('#game-score');
+const timeEl = document.querySelector('#game-time');
+const bestEl = document.querySelector('#game-best');
+const idle = document.querySelector('#game-idle');
+let best = 0;
+try { best = Math.max(0, Number(localStorage.getItem('frise-crypto-best')) || 0); } catch {}
+bestEl.textContent = best;
+const comboEl = document.querySelector('#game-combo');
+let streak = 0;
+let playing = false, score = 0, x = .5, items = [], previous = 0, elapsed = 0, spawnClock = 0, frame;
+const held = new Set();
+function moveTo(next) {
+  const width = board.clientWidth;
+  x = Math.max(39 / width, Math.min(1 - 39 / width, next));
+  bag.style.left = `${x * 100}%`;
+}
+function finish(message) {
+  playing = false; cancelAnimationFrame(frame); held.clear();
+  items.forEach(item => item.el.remove()); items = [];
+  board.classList.remove('playing');
+  if (score > best) { best = score; bestEl.textContent = best; try { localStorage.setItem('frise-crypto-best', String(best)); } catch {} }
+  idle.hidden = false;
+  idle.innerHTML = `ROUND COMPLETE.<small>Your bag: ${score} points. Back to the trenches?</small>`;
+  status.textContent = message || `Bag secured! You scored ${score} points. ${score >= 150 ? 'Certified golden.' : 'Another shift? You got this.'}`;
+  start.textContent = 'PLAY AGAIN →';
+}
+function tick(now) {
+  if (!playing) return;
+  const dt = Math.min((now - previous) / 1000, .05); previous = now; elapsed += dt;
+  timeEl.textContent = Math.max(0, Math.ceil(30 - elapsed));
+  if (elapsed >= 30) { finish(); return; }
+  const width = board.clientWidth, height = board.clientHeight;
+  const direction = Number(held.has('right')) - Number(held.has('left'));
+  moveTo(x + direction * dt * .85);
+  spawnClock += dt;
+  if (spawnClock >= .48) {
+    spawnClock = 0;
+    const roll = Math.random();
+    const bad = roll < .22;
+    const kind = bad ? 'rug' : roll < .45 ? 'sol' : 'fry';
+    const el = document.createElement('div'); el.className = `falling ${kind}`; el.textContent = kind === 'rug' ? 'RUG' : kind === 'sol' ? 'SOL' : '';  el.setAttribute('aria-hidden', 'true'); board.append(el);
+    items.push({ el, bad, kind, x: .06 + Math.random() * .88, y: -40, speed: 130 + Math.random() * 60 + elapsed * 2 });
+  }
+  items = items.filter(item => {
+    item.y += item.speed * dt;
+    const ix = item.x * width;
+    item.el.style.transform = `translate(${ix}px,${item.y}px) rotate(${item.bad ? -15 : 18}deg)`;
+    const bottom = item.y + (item.bad ? 34 : 38);
+    if (bottom >= height - 79 && item.y < height - 14 && Math.abs(ix + 8 - x * width) < 40) {
+      const multiplier = Math.min(3, 1 + Math.floor(streak / 5));
+      const points = item.bad ? -30 : (item.kind === 'sol' ? 25 : 10) * multiplier;
+      streak = item.bad ? 0 : streak + 1;
+      comboEl.textContent = `${Math.min(3, 1 + Math.floor(streak / 5))}×`;
+      score = Math.max(0, score + points); scoreEl.textContent = score;
+      board.classList.remove('rug-hit'); if (item.bad && !reducedMotion) { void board.offsetWidth; board.classList.add('rug-hit'); }
+      const pop = document.createElement('span'); pop.className = 'catch-pop'; pop.textContent = item.bad ? 'RUG −30' : `+${points}${multiplier > 1 ? ' WAGMI' : ''}`; pop.style.left = `${ix}px`; pop.style.top = `${height - 105}px`; board.append(pop); setTimeout(() => pop.remove(), 650);
+      item.el.remove(); return false;
+    }
+    if (item.y > height) { if (!item.bad) { streak = 0; comboEl.textContent = '1×'; } item.el.remove(); return false; }
+    return true;
+  });
+  frame = requestAnimationFrame(tick);
+}
+start.addEventListener('click', () => {
+  cancelAnimationFrame(frame); items.forEach(item => item.el.remove()); items = []; held.clear();
+  score = 0; streak = 0; comboEl.textContent = '1×'; board.classList.remove('rug-hit'); elapsed = 0; spawnClock = .3; scoreEl.textContent = '0'; timeEl.textContent = '30'; moveTo(.5);
+  playing = true; board.classList.add('playing'); idle.hidden = true;
+  status.textContent = 'Market open! Stack fries & SOL. Red RUGs reset your combo.';
+  start.textContent = 'RESTART RUN →'; board.focus({ preventScroll: true }); previous = performance.now(); frame = requestAnimationFrame(tick);
+});
+const keyDirection = key => ['ArrowLeft','a','A'].includes(key) ? 'left' : ['ArrowRight','d','D'].includes(key) ? 'right' : null;
+board.addEventListener('keydown', e => { const dir = keyDirection(e.key); if (playing && dir) { e.preventDefault(); held.add(dir); } });
+window.addEventListener('keyup', e => { const dir = keyDirection(e.key); if (dir) held.delete(dir); });
+window.addEventListener('blur', () => held.clear());
+board.addEventListener('blur', () => held.clear());
+board.addEventListener('pointerdown', e => { if (!playing) return; board.setPointerCapture(e.pointerId); moveTo((e.clientX - board.getBoundingClientRect().left) / board.clientWidth); });
+board.addEventListener('pointermove', e => { if (playing && (e.buttons || e.pointerType === 'touch')) moveTo((e.clientX - board.getBoundingClientRect().left) / board.clientWidth); });
+for (const dir of ['left','right']) {
+  const control = document.querySelector(`#game-${dir}`);
+  control.addEventListener('pointerdown', e => { if (!playing) return; e.preventDefault(); control.setPointerCapture(e.pointerId); held.add(dir); });
+  ['pointerup','pointercancel','lostpointercapture'].forEach(type => control.addEventListener(type, () => held.delete(dir)));
+  control.addEventListener('keydown', e => { if (playing && [' ','Enter'].includes(e.key)) { e.preventDefault(); held.add(dir); } });
+  control.addEventListener('keyup', () => held.delete(dir));
+  control.addEventListener('blur', () => held.delete(dir));
+}
+// End the round when leaving the tab, so background throttling cannot distort a score.
+document.addEventListener('visibilitychange', () => { if (document.hidden && playing) finish('Round ended when you left the tab. Play again whenever you’re ready.'); });
