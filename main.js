@@ -147,3 +147,10 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) { status.textContent = 'Run paused while you’re away. Your bag is safe.'; }
   else { status.textContent = 'Back in the trenches. Keep stacking!'; previous = performance.now(); frame = requestAnimationFrame(tick); }
 });
+
+const nightToggle = document.querySelector('.night-toggle');
+nightToggle.addEventListener('click', () => {
+  const dimmed = document.querySelector('.after-hours').classList.toggle('neon-off');
+  nightToggle.setAttribute('aria-pressed', String(dimmed));
+  nightToggle.textContent = dimmed ? 'CLOCK IN THE NEON ☀' : 'CLOCK OUT THE NEON ☾';
+});
