@@ -1,4 +1,4 @@
-# FRISE
+# FRIES
 
 A responsive fries-themed memecoin landing page, built with Vite and vanilla HTML, CSS, and JavaScript. Includes an original generated mascot, locally bundled fonts, contract copying, and Jupiter / Dexscreener links.
 
