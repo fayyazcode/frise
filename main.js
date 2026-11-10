@@ -1,4 +1,4 @@
-const ca = '8F3oV5RtUBfYfqqmHLW8YZxKx9JXE1zeyLm8NZfyQUCB';
+const ca = '7hGgx1VtNTj193fFXXuMEkp1MRV6JbWYgMBhHRYxaxu2';
 document.querySelectorAll('[data-trade]').forEach(a => a.href = `https://jup.ag/swap/SOL-${ca}`);
 document.querySelectorAll('[data-chart]').forEach(a => a.href = `https://dexscreener.com/solana/${ca}`);
 document.querySelector('#year').textContent = new Date().getFullYear();
